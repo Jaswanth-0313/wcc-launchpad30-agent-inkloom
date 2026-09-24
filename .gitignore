@@ -1,5 +1,34 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/
+.pnp.*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# API keys / secrets
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Build / output artifacts
+build/
+dist/
+dist-ssr/
+out/
+coverage/
+.cache/
+.parcel-cache/
+.vite/
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,18 +36,25 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
+# Editor / IDE files
+.vscode/
 !.vscode/extensions.json
-.idea
+.idea/
+*.code-workspace
+*.swp
+*.swo
+*.tmp
+
+# OS files
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+Thumbs.db
+Desktop.ini
+
+# Local caches / temp files
+*.local
+*.cache
+.eslintcache
+npm-cache/
+
+# Misc
+*.tsbuildinfo
