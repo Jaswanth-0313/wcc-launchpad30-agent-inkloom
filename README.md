@@ -19,7 +19,7 @@ Most brand tools jump from one idea to one generic answer. AI Brand Architect ma
 
 ## Current implementation
 
-This hackathon-ready frontend is fully runnable without external credentials. It uses a structured central project state and a realistic prepared demo path so judges can experience the complete workflow instantly. The stage boundary is deliberately isolated so model-backed agents can be connected through an API without changing the user journey. The local fallback includes context-derived positioning, naming, anti-generic critique, consistency scoring, and visible Agent Handoff traces.
+This hackathon-ready frontend is fully runnable without external credentials. It uses a structured central project state and a realistic prepared demo path so judges can experience the complete workflow instantly. The optional backend in `server/index.mjs` provides authenticated OpenAI generation and MongoDB project persistence without exposing server credentials to the browser. The local fallback remains available when the backend is not configured.
 
 ## Run locally
 
@@ -39,7 +39,18 @@ npm run lint
 
 ## Environment
 
-Copy `.env.example` to `.env` when connecting a server-side model provider. Secrets must remain server-side; the current demo intentionally has no exposed API keys.
+Copy `.env.example` as a reference for local configuration. Frontend `VITE_` variables are public after bundling; backend variables must only be configured on the Render Web Service. Never place OpenAI, MongoDB, or Supabase secret credentials in `src` or in a frontend Render service.
+
+## Render backend
+
+Deploy a second Render service as a **Web Service** from this repository:
+
+- Root Directory: repository root, `.`
+- Build Command: `npm ci`
+- Start Command: `npm start`
+- Health Check Path: `/health`
+
+Configure these backend variables in Render: `OPENAI_API_KEY`, `OPENAI_MODEL`, `MONGODB_URI`, `MONGODB_DB_NAME`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `APP_ORIGIN`. Render supplies `PORT` automatically. Set `APP_ORIGIN` to the deployed frontend URL. The backend exposes `GET /health`, authenticated `POST /api/ai/analyze` and `/api/ai/generate`, plus authenticated project CRUD routes under `/api/projects`.
 
 ## Project structure
 

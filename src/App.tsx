@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
+import { analyzeProject, createProject } from './lib/api'
 import { supabase } from './lib/supabase'
 
 type Stage = 'discovery' | 'strategy' | 'personality' | 'naming' | 'visual' | 'critic' | 'consistency' | 'launch'
@@ -91,6 +92,16 @@ function detectGeneric(brand: BrandState): GenericFlag[] {
     .map(([phrase, reason, alternative]) => ({ phrase, reason, alternative }))
 }
 
+function summarizeAnalysis(analysis: Record<string, unknown>) {
+  const problemUnderstanding = analysis.problemUnderstanding
+  if (typeof problemUnderstanding === 'string') return problemUnderstanding
+  if (problemUnderstanding && typeof problemUnderstanding === 'object') {
+    const summary = (problemUnderstanding as Record<string, unknown>).summary
+    if (typeof summary === 'string') return summary
+  }
+  return 'The structured analysis is saved and ready to review in the project workspace.'
+}
+
 function App() {
   const [brand, setBrand] = useState(blankBrand)
   const [stage, setStage] = useState<Stage>('discovery')
@@ -101,6 +112,9 @@ function App() {
   const [authMode, setAuthMode] = useState<AuthMode>('signin')
   const [authForm, setAuthForm] = useState({ name: 'Alex Morgan', email: 'alex@inkloom.io', password: 'password123' })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [analysis, setAnalysis] = useState<Record<string, unknown> | null>(null)
+  const [isSessionLoading, setIsSessionLoading] = useState(true)
   const [session, setSession] = useState<{ user?: { email?: string | null } } | null>(null)
 
   const index = stages.findIndex((item) => item.id === stage)
@@ -137,12 +151,18 @@ function App() {
     let active = true
 
     const hydrateSession = async () => {
-      const { data } = await supabase.auth.getSession()
-      if (!active) return
-      setSession(data.session)
-      if (data.session) {
-        setPage('workspace')
-        setStarted(true)
+      try {
+        const { data } = await supabase.auth.getSession()
+        if (!active) return
+        setSession(data.session)
+        if (data.session) {
+          setPage('workspace')
+          setStarted(true)
+        }
+      } catch {
+        if (active) setNotice({ type: 'error', message: 'Unable to restore your session. You can try signing in again.' })
+      } finally {
+        if (active) setIsSessionLoading(false)
       }
     }
 
@@ -205,6 +225,33 @@ function App() {
     setNotice(null)
   }
 
+  const runAnalysis = async () => {
+    if (!brand.problem.trim()) {
+      setNotice({ type: 'info', message: 'Add a problem statement before asking Inkloom to analyze it.' })
+      return
+    }
+
+    setIsAnalyzing(true)
+    setNotice(null)
+
+    try {
+      const result = await analyzeProject(brand.problem, {
+        idea: brand.idea,
+        audience: brand.audience,
+        alternatives: brand.alternatives,
+        goal: brand.goal,
+        constraints: brand.constraints,
+      })
+      await createProject({ problem: brand.problem, context: brand, analysis: result.analysis })
+      setAnalysis(result.analysis)
+      setNotice({ type: 'success', message: 'AI analysis generated and saved to your project.' })
+    } catch (error) {
+      setNotice({ type: 'error', message: error instanceof Error ? error.message : 'Analysis failed. Please try again.' })
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
   const handleAuthSubmit = async (event: FormEvent) => {
     event.preventDefault()
     setIsSubmitting(true)
@@ -219,17 +266,23 @@ function App() {
       }
 
       if (authMode === 'signup') {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { data: { full_name: authForm.name.trim() || 'Inkloom user' } },
         })
 
         if (error) throw error
+        if (!data.session) {
+          setNotice({ type: 'success', message: 'Account created. Confirm your email, then sign in to continue.' })
+          setAuthMode('signin')
+          return
+        }
         setNotice({ type: 'success', message: 'Account created. Check your email to confirm sign-in if required.' })
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
+        if (!data.session) throw new Error('Sign-in did not create a session. Check your email confirmation status.')
         setNotice({ type: 'success', message: 'Welcome back. You are signed in.' })
       }
 
@@ -258,7 +311,12 @@ function App() {
     setShowDashboard(false)
     setStage('discovery')
     setBrand(blankBrand)
+    setAnalysis(null)
     setNotice({ type: 'success', message: 'Signed out successfully.' })
+  }
+
+  if (isSessionLoading) {
+    return <div className="auth-loading" role="status">Restoring your session...</div>
   }
 
   if (page === 'landing') {
@@ -394,6 +452,9 @@ function App() {
               if (value) setPage('dashboard')
               else setPage('workspace')
             }}
+            isAnalyzing={isAnalyzing}
+            analysis={analysis}
+            onAnalyze={runAnalysis}
           />
         )}
       </main>
@@ -801,6 +862,9 @@ function Workflow({
   notice,
   setStage,
   setShowDashboard,
+  isAnalyzing,
+  analysis,
+  onAnalyze,
 }: {
   stage: Stage
   brand: BrandState
@@ -810,6 +874,9 @@ function Workflow({
   notice: ToastState
   setStage: (stage: Stage) => void
   setShowDashboard: (show: boolean) => void
+  isAnalyzing: boolean
+  analysis: Record<string, unknown> | null
+  onAnalyze: () => void
 }) {
   const current = stages.find((item) => item.id === stage)!
   const progress = Math.round(((stages.findIndex((item) => item.id === stage) + 1) / stages.length) * 100)
@@ -839,7 +906,7 @@ function Workflow({
         </div>
       </div>
 
-      <StageContent stage={stage} brand={brand} update={update} setStage={setStage} />
+      <StageContent stage={stage} brand={brand} update={update} setStage={setStage} isAnalyzing={isAnalyzing} analysis={analysis} onAnalyze={onAnalyze} />
       <ReasoningTrace stage={stage} brand={brand} />
 
       <div className="workflow-footer">
@@ -865,7 +932,7 @@ function Workflow({
   )
 }
 
-function StageContent({ stage, brand, update, setStage }: { stage: Stage; brand: BrandState; update: (key: keyof BrandState, value: string | boolean | string[]) => void; setStage: (stage: Stage) => void }) {
+function StageContent({ stage, brand, update, setStage, isAnalyzing, analysis, onAnalyze }: { stage: Stage; brand: BrandState; update: (key: keyof BrandState, value: string | boolean | string[]) => void; setStage: (stage: Stage) => void; isAnalyzing: boolean; analysis: Record<string, unknown> | null; onAnalyze: () => void }) {
   if (stage === 'discovery') {
     return (
       <div className="stage-grid">
@@ -893,6 +960,20 @@ function StageContent({ stage, brand, update, setStage }: { stage: Stage; brand:
               <p>What changes for the audience if this problem stays unresolved?</p>
             </div>
           </div>
+          <div className="form-footer">
+            <button className="outline-button" onClick={onAnalyze} type="button" disabled={isAnalyzing}>
+              {isAnalyzing ? 'Analyzing...' : 'Analyze with AI'}
+            </button>
+          </div>
+          {analysis && (
+            <div className="question">
+              <span>✦</span>
+              <div>
+                <strong>Saved AI analysis</strong>
+                <p>{summarizeAnalysis(analysis)}</p>
+              </div>
+            </div>
+          )}
         </Card>
       </div>
     )
