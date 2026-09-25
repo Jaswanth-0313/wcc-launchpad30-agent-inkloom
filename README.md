@@ -57,6 +57,7 @@ Configure these backend variables in Render: `OPENAI_API_KEY`, `OPENAI_MODEL`, `
 - `src/App.tsx`: workflow state, stage navigation, structured stage surfaces, demo data, anti-generic checks, and export action.
 - `src/agents/types.ts`: typed agent context and output contract.
 - `src/agents/prompts.ts`: separate role, objective, schema, and constraint definitions for all eight agents.
+Inkloom deployment setup.
 - `src/index.css`: responsive visual system for the workspace.
 - `docs/submission.md`: submission placeholders.
 - `docs/demo-script.md`: four-minute demo flow.
